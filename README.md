@@ -11,6 +11,8 @@ Daemon for running Magento 2 queue consumers, designed to be run as a systemd/su
 
 ## Installation
 
+As this project is still a work in progress, there are no precompiled binaries available yet. Please follow the instructions below to compile the project yourself.
+
 ```bash
 git clone https://github.com/tdgroot/magento2-worker-daemon.git
 cargo run -- --working-directory /path/to/magento2
@@ -76,3 +78,4 @@ Things that still need to be done:
 - Add unit tests
 - Add proper signal handling (SIGTERM, SIGINT, SIGQUIT)
   - Currently, the daemon will only stop child processes when it receives a SIGINT
+- Distribute precompiled binaries on GitHub releases
