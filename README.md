@@ -75,6 +75,4 @@ This project is still a work in progress, and is not yet ready for production us
 
 Things that still need to be done:
 - Add unit tests
-- Add proper signal handling (SIGTERM, SIGINT, SIGQUIT)
-  - Currently, the daemon will only stop child processes when it receives a SIGINT
 - Distribute precompiled binaries on GitHub releases
