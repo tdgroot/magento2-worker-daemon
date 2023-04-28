@@ -76,3 +76,6 @@ This project is still a work in progress, and is not yet ready for production us
 Things that still need to be done:
 - Add unit tests
 - Distribute precompiled binaries on GitHub releases
+- Blocklist for consumers that should not be started
+- Detection of rabbitmq config and skipping if no rabbitmq is configured
+- Support for specifying consumer options (e.g. max messages, multi-process, etc.)
