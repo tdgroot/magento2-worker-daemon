@@ -1,6 +1,16 @@
-use std::{env, path::Path, process::Command, sync::Arc, thread, time::Duration};
+mod util;
+
+use std::{
+    env,
+    path::Path,
+    process::Command,
+    sync::{atomic::AtomicBool, Arc},
+    thread,
+    time::Duration,
+};
 
 use clap::Parser;
+use signal_hook::consts::TERM_SIGNALS;
 
 //
 // Magento 2 Worker Daemon
@@ -17,7 +27,6 @@ use clap::Parser;
 //
 // TODO:
 // - Add unit tests
-// - Add proper signal handling with signal_hook
 //
 
 #[derive(Parser, Debug)]
@@ -27,16 +36,45 @@ struct Args {
     verbose: bool,
     #[arg(short, long)]
     working_directory: Option<std::path::PathBuf>,
-    #[arg(short, long, default_value_t = 5)]
-    sleep_time: u32,
 }
 
 #[derive(Clone, Debug)]
 struct DaemonConfig {
-    // The amount of time to sleep between each iteration of the consumer loop.
-    sleep_time: u32,
     // The working directory of the Magento 2 installation.
     magento_dir: String,
+}
+
+#[derive(Debug)]
+struct WorkerProcess {
+    // The consumer name
+    consumer: String,
+    // The process handle
+    process: std::process::Child,
+}
+
+impl WorkerProcess {
+    fn terminate(&mut self) {
+        log::debug!("Terminating consumer: {}", self.consumer);
+        util::terminate_process_child(&self.process).unwrap();
+        if self.process.try_wait().unwrap().is_none() {
+            self.process.kill().unwrap();
+        }
+    }
+
+    fn is_running(&mut self) -> bool {
+        match self.process.try_wait() {
+            Ok(Some(_)) => false,
+            Ok(None) => true,
+            Err(_) => false,
+        }
+    }
+
+    fn restart(&mut self, config: &DaemonConfig) {
+        if self.is_running() {
+            self.terminate();
+        }
+        self.process = run_consumer(config, &self.consumer).process;
+    }
 }
 
 enum EnvironmentError {
@@ -47,7 +85,6 @@ enum EnvironmentError {
 
 fn read_config(args: &Args) -> DaemonConfig {
     DaemonConfig {
-        sleep_time: args.sleep_time,
         magento_dir: match args.working_directory {
             Some(ref path) => path.to_str().unwrap().to_string(),
             None => env::current_dir().unwrap().to_str().unwrap().to_string(),
@@ -82,6 +119,7 @@ fn validate_config(config: &DaemonConfig) -> Result<(), EnvironmentError> {
         return Err(EnvironmentError::MagentoBinNotFound);
     }
 
+    // Check if cron worker spawner is disabled
     if !magento_cron_worker_is_disabled(&config) {
         return Err(EnvironmentError::MagentoCronWorkerEnabled);
     }
@@ -106,21 +144,18 @@ fn read_consumer_list(config: &DaemonConfig) -> Vec<String> {
         .collect()
 }
 
-fn run_consumer(config: &DaemonConfig, consumer: &String) {
+fn run_consumer(config: &DaemonConfig, consumer: &String) -> WorkerProcess {
     log::debug!("Running consumer: {}", consumer);
-    Command::new("bin/magento")
+    let process = Command::new("bin/magento")
         .current_dir(&config.magento_dir)
         .arg("queue:consumers:start")
         .arg(consumer)
-        .output()
+        .spawn()
         .expect("failed to run bin/magento queue:consumers:start");
-}
-
-fn run_consumer_thread(config: Arc<DaemonConfig>, consumer: String) -> thread::JoinHandle<()> {
-    thread::spawn(move || loop {
-        run_consumer(&config, &consumer);
-        thread::sleep(Duration::from_secs(config.sleep_time as u64));
-    })
+    WorkerProcess {
+        consumer: consumer.clone(),
+        process,
+    }
 }
 
 fn configure_logging(args: &Args) {
@@ -140,9 +175,9 @@ fn main() {
         Ok(_) => {}
         Err(err) => {
             match err {
-                EnvironmentError::MagentoDirNotFound => log::error!("error: Magento directory not found"),
-                EnvironmentError::MagentoBinNotFound => log::error!("error: Magento bin not found"),
-                EnvironmentError::MagentoCronWorkerEnabled => log::error!("error: Magento cron worker is enabled. Please see https://devdocs.magento.com/guides/v2.3/config-guide/mq/manage-message-queues.html#configuration to see how to disable the cron_run variable."),
+                EnvironmentError::MagentoDirNotFound => log::error!("Magento directory not found"),
+                EnvironmentError::MagentoBinNotFound => log::error!("Magento bin not found"),
+                EnvironmentError::MagentoCronWorkerEnabled => log::error!("Magento cron worker is enabled. Please see https://devdocs.magento.com/guides/v2.3/config-guide/mq/manage-message-queues.html#configuration to see how to disable the cron_run variable."),
             }
             std::process::exit(1);
         }
@@ -152,15 +187,29 @@ fn main() {
     let consumers = read_consumer_list(&config);
     log::info!("Found {} consumers", consumers.len());
 
-    let mut threads: Vec<thread::JoinHandle<()>> = Vec::new();
-    for consumer in consumers {
-        let config = Arc::new(config.clone());
-        let thread = run_consumer_thread(config, consumer);
-        threads.push(thread);
-    }
-    log::info!("Started {} threads", threads.len());
+    let mut processes: Vec<WorkerProcess> = consumers
+        .iter()
+        .map(|consumer| run_consumer(&config, &consumer))
+        .collect();
+    log::info!("Started {} consumers", processes.len());
 
-    for thread in threads {
-        thread.join().unwrap();
+    let term = Arc::new(AtomicBool::new(false));
+    for sig in TERM_SIGNALS {
+        signal_hook::flag::register(*sig, Arc::clone(&term)).unwrap();
+    }
+
+    while !term.load(std::sync::atomic::Ordering::Relaxed) {
+        // If any of the processes have exited, restart them
+        for process in &mut processes {
+            if !process.is_running() {
+                process.restart(&config);
+            }
+        }
+        thread::sleep(Duration::from_secs(2));
+    }
+
+    log::info!("Stopping {} consumers", processes.len());
+    for mut process in processes {
+        process.terminate();
     }
 }

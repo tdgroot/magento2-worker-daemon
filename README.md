@@ -23,7 +23,7 @@ cargo run -- --working-directory /path/to/magento2
 ```console
 $ magento2-worker-daemon
 2023-04-28T13:36:12.788Z INFO  [magento2_worker_daemon] Found 19 consumers
-2023-04-28T13:36:12.793Z INFO  [magento2_worker_daemon] Started 19 t
+2023-04-28T13:36:12.793Z INFO  [magento2_worker_daemon] Started 19 consumers
 ```
 
 ### Command line options
@@ -35,7 +35,6 @@ Usage: magento2-worker-daemon [OPTIONS]
 Options:
   -v, --verbose                                
   -w, --working-directory <WORKING_DIRECTORY>  
-  -s, --sleep-time <SLEEP_TIME>                [default: 5]
   -h, --help                                   Print help
   -V, --version                                Print version
 ```
