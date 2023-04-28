@@ -11,11 +11,10 @@ Daemon for running Magento 2 queue consumers, designed to be run as a systemd/su
 
 ## Installation
 
-As this project is still a work in progress, there are no precompiled binaries available yet. Please follow the instructions below to compile the project yourself.
-
 ```bash
-git clone https://github.com/tdgroot/magento2-worker-daemon.git
-cargo run -- --working-directory /path/to/magento2
+wget --quiet https://github.com/tdgroot/magento2-worker-daemon/releases/latest/download/magento2-worker-daemon -O magento2-worker-daemon
+chmod +x magento2-worker-daemon
+./magento2-worker-daemon
 ```
 
 ## Usage
@@ -75,7 +74,6 @@ This project is still a work in progress, and is not yet ready for production us
 
 Things that still need to be done:
 - Add unit tests
-- Distribute precompiled binaries on GitHub releases
 - Blocklist for consumers that should not be started
 - Detection of rabbitmq config and skipping if no rabbitmq is configured
 - Support for specifying consumer options (e.g. max messages, multi-process, etc.)
