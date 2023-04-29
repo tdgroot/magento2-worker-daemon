@@ -40,12 +40,12 @@ Options:
 
 ## Configuration
 
-First make sure you disable the `queue_consumers_runner.cron_run` setting in the `app/etc/env.php`:
+First make sure you disable the `cron_consumers_runner.cron_run` setting in the `app/etc/env.php`:
 
 ```php
 return [
     ...
-    'queue_consumers_runner' => [
+    'cron_consumers_runner' => [
         'cron_run' => false
     ],
     ...
