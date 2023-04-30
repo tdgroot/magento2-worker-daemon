@@ -28,9 +28,6 @@ use crate::worker::WorkerProcess;
 // 3. The consumer is run in a loop, and sleeps for a configurable amount of time
 //    between each iteration.
 //
-// TODO:
-// - Add unit tests
-//
 
 fn configure_logging(args: &InputArgs) {
     if args.verbose {
