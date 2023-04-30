@@ -2,6 +2,8 @@ use std::process::Command;
 
 use crate::{config::DaemonConfig, util};
 
+const RABBITMQ_CONSUMER_NAMES: [&str; 1] = ["async.operations.all"];
+
 #[derive(Debug)]
 pub struct WorkerProcess {
     // The consumer name
@@ -49,6 +51,14 @@ pub fn read_consumer_list(config: &DaemonConfig) -> Vec<String> {
         .split(|&x| x == b'\n')
         .map(|x| String::from_utf8(x.to_vec()).unwrap())
         .filter(|x| !x.is_empty())
+        .filter(|x| {
+            // Filter out rabbitmq consumers when rabbitmq is not configured
+            if !config.rabbitmq_configured {
+                !RABBITMQ_CONSUMER_NAMES.contains(&x.as_str())
+            } else {
+                true
+            }
+        })
         .collect()
 }
 
