@@ -41,7 +41,7 @@ fn main() {
     let args = input::parse_args();
     configure_logging(&args);
 
-    let config = config::read_config(&args);
+    let config = config::DaemonConfig::new(&args);
     match config::validate_config(&config) {
         Ok(_) => {}
         Err(err) => {
