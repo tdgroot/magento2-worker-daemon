@@ -4,7 +4,8 @@ Daemon for running Magento 2 queue consumers, designed to be run as a systemd/su
 
 ## Features
 
-- Detects and runs all Magento 2 queue consumers
+- Detects and runs all eligible Magento 2 queue consumers
+  - If RabbitMQ is not configured, it will not run consumers that require RabbitMQ
 - Restarts consumers if they fail/stop
 - Supports running consumers in a different working directory
 - Validates Magento 2 installation before starting consumers
@@ -86,5 +87,4 @@ This project is still a work in progress, and is not yet ready for production us
 
 Things that still need to be done:
 - Blocklist for consumers that should not be started
-- Detection of rabbitmq config and skipping if no rabbitmq is configured
 - Support for specifying consumer options (e.g. max messages, multi-process, etc.)
