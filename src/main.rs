@@ -23,10 +23,14 @@ use crate::worker::WorkerProcess;
 //
 // The daemon works as follows:
 // 1. It reads the available queue consumers from the Magento 2 configuration.
-//    This is done by running bin/magento queue:consumers:list
-// 2. It then spawns a thread for each consumer, which runs the consumer in a loop.
-// 3. The consumer is run in a loop, and sleeps for a configurable amount of time
-//    between each iteration.
+//    This is done by running bin/magento queue:consumers:list.
+//    RabbitMQ specific queues are filtered out when RabbitMQ is not configured.
+//    It's also possible to run only a specific selection of consumers by setting
+//    the cron_consumers_runner.consumers configuration in the env.php. This setting
+//    is also regarded for selecting the consumers to run.
+// 2. It then runs each consumer and restarts consumers that stopped running.
+// 3. When the daemon receives a signal to be stopped, it tries to gracefully stop
+//    the running consumers.
 //
 
 fn configure_logging(args: &InputArgs) {
@@ -41,27 +45,25 @@ fn main() {
     let args = input::parse_args();
     configure_logging(&args);
 
-    let config = config::DaemonConfig::new(&args);
-    match config::validate_config(&config) {
-        Ok(_) => {}
-        Err(err) => {
-            use config::EnvironmentError::*;
-            match err {
-                MagentoDirNotFound => log::error!("Magento directory not found"),
-                MagentoBinNotFound => log::error!("Magento bin not found"),
-                MagentoCronWorkerEnabled => log::error!("Magento cron worker is enabled. Please see https://devdocs.magento.com/guides/v2.3/config-guide/mq/manage-message-queues.html#configuration to see how to disable the cron_run variable."),
-            }
-            std::process::exit(1);
-        }
-    }
+    let context = config::DaemonContext::new(&args).unwrap_or_else(|e| {
+        log::error!("{}", e.message);
+        std::process::exit(1);
+    });
 
     log::debug!("Fetching consumer list...");
-    let consumers = worker::read_consumer_list(&config);
-    log::info!("Found {} consumers", consumers.len());
+    let consumers = worker::read_consumer_list(&context.daemon_config);
+    let consumers = consumers
+        .iter()
+        .filter(|x| {
+            context.consumer_config.consumers.is_empty()
+                || context.consumer_config.consumers.contains(x)
+        })
+        .collect::<Vec<_>>();
+    log::info!("Found {} applicable consumers", consumers.len());
 
     let mut processes: Vec<WorkerProcess> = consumers
         .iter()
-        .map(|consumer| worker::run_worker(&config, &consumer))
+        .map(|consumer| worker::run_worker(&context, consumer))
         .collect();
     log::info!("Started {} consumers", processes.len());
 
@@ -74,7 +76,7 @@ fn main() {
         // If any of the processes have exited, restart them
         for process in &mut processes {
             if !process.is_running() {
-                process.restart(&config);
+                process.restart(&context);
             }
         }
         thread::sleep(Duration::from_secs(2));

@@ -1,6 +1,9 @@
 use std::process::Command;
 
-use crate::{config::DaemonConfig, util};
+use crate::{
+    config::{DaemonConfig, DaemonContext},
+    util,
+};
 
 const RABBITMQ_CONSUMER_NAMES: [&str; 1] = ["async.operations.all"];
 
@@ -29,11 +32,11 @@ impl WorkerProcess {
         }
     }
 
-    pub fn restart(&mut self, config: &DaemonConfig) {
+    pub fn restart(&mut self, context: &DaemonContext) {
         if self.is_running() {
             self.terminate();
         }
-        self.process = run_worker(config, &self.consumer).process;
+        self.process = run_worker(&context, &self.consumer).process;
     }
 }
 
@@ -62,14 +65,30 @@ pub fn read_consumer_list(config: &DaemonConfig) -> Vec<String> {
         .collect()
 }
 
-pub fn run_worker(config: &DaemonConfig, consumer: &String) -> WorkerProcess {
+pub fn run_worker(context: &DaemonContext, consumer: &String) -> WorkerProcess {
     log::debug!("Running consumer: {}", consumer);
-    let process = Command::new("bin/magento")
-        .current_dir(&config.magento_dir)
+    let mut command = Command::new("bin/magento");
+    let command = command
+        .current_dir(&context.daemon_config.magento_dir)
         .arg("queue:consumers:start")
         .arg(consumer)
+        .arg("--max-messages")
+        .arg(context.consumer_config.max_messages.to_string());
+
+    if let Some(processes) = context.consumer_config.multiple_processes.get(consumer) {
+        if *processes > 1 {
+            command.arg("--multi-process").arg(processes.to_string());
+        } else {
+            command.arg("--single-thread");
+        }
+    } else {
+        command.arg("--single-thread");
+    }
+
+    let process = command
         .spawn()
         .expect("failed to run bin/magento queue:consumers:start");
+
     WorkerProcess {
         consumer: consumer.clone(),
         process,
