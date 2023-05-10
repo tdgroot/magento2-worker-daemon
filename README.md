@@ -2,15 +2,21 @@
 
 Daemon for running Magento 2 queue consumers, designed to be run as a systemd/supervisor service.
 
+This daemon acts as a drop-in replacement for the Magento 2 cron consumers runner, compatible with the Magento 2 [cron consumers runner configuration](https://experienceleague.adobe.com/docs/commerce-operations/configuration-guide/message-queues/manage-message-queues.html#configuration).
+
 ## Features
 
 - Detects and runs all eligible Magento 2 queue consumers
-  - If RabbitMQ is not configured, it will not run consumers that require RabbitMQ
+  - RabbitMQ specific consumers are not run when RabbitMQ is not configured in Magento.
+  - Compatible with the `cron_consumers_runner.consumers` setting to only run specified consumers.
+  - Regards all settings in the `cron_consumers_runner` [environment configuration](https://experienceleague.adobe.com/docs/commerce-operations/configuration-guide/message-queues/manage-message-queues.html#configuration).
 - Restarts consumers if they fail/stop
 - Supports running consumers in a different working directory
 - Validates Magento 2 installation before starting consumers
 
 ## Installation
+
+Make sure you have the correct `php` binary in the PATH environment variable where you're going to run this.
 
 ```bash
 wget --quiet https://github.com/tdgroot/magento2-worker-daemon/releases/latest/download/magento2-worker-daemon -O magento2-worker-daemon
@@ -33,8 +39,8 @@ $ magento2-worker-daemon --help
 Usage: magento2-worker-daemon [OPTIONS]
 
 Options:
-  -v, --verbose                                
-  -w, --working-directory <WORKING_DIRECTORY>  
+  -v, --verbose                                Enable verbose logging
+  -w, --working-directory <WORKING_DIRECTORY>  Magento 2 working directory
   -h, --help                                   Print help
   -V, --version                                Print version
 ```
@@ -81,10 +87,3 @@ stopsignal=INT
 stopasgroup=true
 ```
 
-## Work in progress
-
-This project is still a work in progress, and is not yet ready for production use.
-
-Things that still need to be done:
-- Blocklist for consumers that should not be started
-- Support for specifying consumer options (e.g. max messages, multi-process, etc.)
