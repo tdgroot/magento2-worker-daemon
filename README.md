@@ -16,7 +16,7 @@ This daemon acts as a drop-in replacement for the Magento 2 cron consumers runne
 
 ## Installation
 
-Make sure you have the correct `php` binary in the PATH environment variable where you're going to run this.
+The program is not available yet on any package repository, so for now you can to download it from the latest GitHub release.
 
 ```bash
 wget --quiet https://github.com/tdgroot/magento2-worker-daemon/releases/latest/download/magento2-worker-daemon -O magento2-worker-daemon
@@ -58,6 +58,9 @@ return [
     ...
 ];
 ```
+
+Also make sure you have the correct `php` binary in the `PATH` environment variable where you're going to run this.
+So if you have PHP installed in a directory that is not in the default `PATH`, make sure you set the proper environment configuration for systemd/supervisor.
 
 ### Systemd
 
