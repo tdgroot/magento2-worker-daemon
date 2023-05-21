@@ -75,9 +75,7 @@ fn main() {
     while !term.load(std::sync::atomic::Ordering::Relaxed) {
         // If any of the processes have exited, restart them
         for process in &mut processes {
-            if !process.is_running() {
-                process.restart(&context);
-            }
+            process.ensure_running(&context);
         }
         thread::sleep(Duration::from_secs(2));
     }
