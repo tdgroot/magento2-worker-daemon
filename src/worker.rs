@@ -1,11 +1,13 @@
-use std::process::Command;
+use std::{process::Command, time::Duration};
 
 use crate::{
     config::{DaemonConfig, DaemonContext},
-    util,
+    util::terminate_process_child,
 };
 
 const RABBITMQ_CONSUMER_NAMES: [&str; 1] = ["async.operations.all"];
+const PROCESS_GRACEFUL_KILL_PERIOD: Duration = Duration::from_millis(500);
+const PROCESS_GRACEFUL_POLL_RESOLUTION: Duration = Duration::from_millis(20);
 
 #[derive(Debug)]
 pub struct WorkerProcess {
@@ -19,16 +21,13 @@ impl WorkerProcess {
     pub fn terminate(&mut self) {
         log::debug!("Terminating consumer: {}", self.consumer);
         for p in self.processes.iter_mut() {
-            util::terminate_process_child(&p).unwrap();
-            if p.is_running() {
-                log::debug!("Force killing consumer: {}", self.consumer);
-                p.kill().unwrap();
-            }
+            p.try_stop_gracefully(PROCESS_GRACEFUL_KILL_PERIOD);
         }
     }
 
     pub fn ensure_running(&mut self, context: &DaemonContext) {
-        if !self.processes.is_running() {
+        let is_running = self.processes.iter_mut().all(|p| p.is_running());
+        if !is_running {
             self.restart(context);
         }
     }
@@ -41,13 +40,17 @@ impl WorkerProcess {
 
 trait WorkerChildProcess {
     fn is_running(&mut self) -> bool;
+    fn try_stop_gracefully(&mut self, grace_period: Duration);
 }
 
 impl WorkerChildProcess for std::process::Child {
     fn is_running(&mut self) -> bool {
         match self.try_wait() {
             Ok(Some(status)) => {
-                log::debug!("Process exited with status {:?}", status);
+                match status.code() {
+                    Some(code) => log::debug!("Process {} exited with status {}", self.id(), code),
+                    None => log::debug!("Process {} was terminated", self.id()),
+                }
                 return false;
             }
             Ok(None) => true,
@@ -57,11 +60,31 @@ impl WorkerChildProcess for std::process::Child {
             }
         }
     }
-}
 
-impl WorkerChildProcess for Vec<std::process::Child> {
-    fn is_running(&mut self) -> bool {
-        self.iter_mut().all(|p| p.is_running())
+    fn try_stop_gracefully(&mut self, grace_period: Duration) {
+        if !self.is_running() {
+            return;
+        }
+
+        let terminate_result = terminate_process_child(self);
+        if terminate_result.is_err() {
+            log::error!("Failed to SIGTERM process");
+        }
+
+        let mut waiting_time = 0;
+        while self.is_running() {
+            if waiting_time >= grace_period.as_millis() {
+                self.kill().unwrap();
+                log::debug!("Force killing process");
+                break;
+            }
+            std::thread::sleep(PROCESS_GRACEFUL_POLL_RESOLUTION);
+            waiting_time += PROCESS_GRACEFUL_POLL_RESOLUTION.as_millis();
+        }
+
+        // After it's killed, we need to call wait for the process to be removed from the process
+        // table. For more information, see NOTES in man waitpid(2).
+        self.wait().expect("Failed to wait for process to exit");
     }
 }
 
