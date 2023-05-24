@@ -15,24 +15,6 @@ use input::Args as InputArgs;
 
 use crate::worker::WorkerProcess;
 
-//
-// Magento 2 Worker Daemon
-//
-// This is a daemon that runs Magento 2 queue consumers in the background.
-// It is designed to be run as a systemd/supervisor service.
-//
-// The daemon works as follows:
-// 1. It reads the available queue consumers from the Magento 2 configuration.
-//    This is done by running bin/magento queue:consumers:list.
-//    RabbitMQ specific queues are filtered out when RabbitMQ is not configured.
-//    It's also possible to run only a specific selection of consumers by setting
-//    the cron_consumers_runner.consumers configuration in the env.php. This setting
-//    is also regarded for selecting the consumers to run.
-// 2. It then runs each consumer and restarts consumers that stopped running.
-// 3. When the daemon receives a signal to be stopped, it tries to gracefully stop
-//    the running consumers.
-//
-
 fn configure_logging(args: &InputArgs) {
     if args.verbose {
         simple_logger::init_with_level(log::Level::Debug).unwrap();
